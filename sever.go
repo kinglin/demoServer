@@ -1,19 +1,26 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"gopkg.in/mgo.v2"
 	"net"
 	"os"
 )
 
+type Person struct {
+	Id   int    `json:"id"`
+	Name string `json:"name"`
+}
+
 func main() {
 	var (
-		host   = "127.0.0.1"
-		port   = "8080"
+		host   = "115.156.249.17"
+		port   = "12345"
 		remote = host + ":" + port
 		data   = make([]byte, 1024)
 	)
-	fmt.Println("Initiating server... (Ctrl-C to stop)")
+	fmt.Println("Initiating server...")
 
 	lis, err := net.Listen("tcp", remote)
 	defer lis.Close()
@@ -40,9 +47,32 @@ func main() {
 					con.Close()
 					return
 				}
+
 				res = string(data[0:length])
-				fmt.Printf("%s said: %s\n", con.RemoteAddr(), res)
-				res = "You said:" + res
+				//打印接收到的字符串
+				fmt.Printf("%s said: %s", con.RemoteAddr(), res)
+
+				//解析json
+				var people Person
+				if err := json.Unmarshal([]byte(res), &people); err == nil {
+					fmt.Println(people.Name)
+				}
+
+				//将此数据插入数据库
+				session, err := mgo.Dial("127.0.0.1:27017")
+				if err != nil {
+					panic(err)
+				}
+				defer session.Close()
+
+				session.SetMode(mgo.Monotonic, true)
+
+				//拿到需要使用的集合
+				collection := session.DB("test").C("person")
+
+				//插入数据
+				collection.Insert(&Person{people.Id, people.Name})
+
 				con.Write([]byte(res))
 			}
 		}(conn)
